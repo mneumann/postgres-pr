@@ -183,6 +183,23 @@ class AuthentificationSCMCredential < Authentification
   register_auth_type 6
 end
 
+class PasswordMessage < Message
+  register_message_type ?p
+  fields :password
+
+  def dump
+    super(@password.size + 1) do |buffer|
+      buffer.write_cstring(@password)
+    end
+  end
+
+  def parse(buffer)
+    super do
+      @password = buffer.read_cstring
+    end
+  end
+end
+
 class ParameterStatus < Message
   register_message_type ?S
   fields :key, :value
@@ -472,4 +489,34 @@ class StartupMessage < Message
     raise ParseError unless nul == 0
     raise ParseError unless buffer.at_end?
   end
+end
+
+class SSLRequest < Message
+  fields :ssl_request_code
+
+  def dump
+    sz = 4 + 4
+    buffer = Buffer.new(sz)
+    buffer.write_int32_network(sz)
+    buffer.write_int32_network(@ssl_request_code)
+    raise DumpError unless buffer.at_end?
+    return buffer.content
+  end
+
+  def parse(buffer)
+    buffer.position = 4
+    @ssl_request_code = buffer.read_int32_network
+    raise ParseError unless buffer.at_end?
+  end
+end
+
+=begin
+# TODO: duplicate message-type, split into client/server messages
+class Sync < Message
+  register_message_type ?S
+end
+=end
+
+class Terminate < Message
+  register_message_type ?X
 end

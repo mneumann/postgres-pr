@@ -1,0 +1,8 @@
+* Message types
+
+Bind, BindComplete, CancelRequest, Close, CloseComplete, CommandComplete,
+CopyData, CopyDone, CopyFail, CopyInResponse, CopyOutResponse, Describe,
+Execute, Flush, FunctionCall, FunctionCallResponse, NoData,
+NotificationResponse, ParameterDescription, PortalSuspended
+
+* SSLRequest instead of StartupMessage

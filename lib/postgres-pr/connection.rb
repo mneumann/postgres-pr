@@ -14,7 +14,7 @@ class Connection
 
   # sync
 
-  def initialize(database, user, auth=nil, uri = nil)
+  def initialize(database, user, password=nil, uri = nil)
     uri ||= "unix:/tmp/.s.PGSQL.5432"
 
     raise unless @mutex.nil?
@@ -29,10 +29,31 @@ class Connection
 
       loop do
         msg = Message.read(@conn)
+
         case msg
+        when AuthentificationClearTextPassword
+          raise ArgumentError, "no password specified" if password.nil?
+          @conn << PasswordMessage.new(password).dump
+
+        when AuthentificationCryptPassword
+          raise ArgumentError, "no password specified" if password.nil?
+          @conn << PasswordMessage.new(password.crypt(msg.salt)).dump
+
+        when AuthentificationMD5Password
+          raise ArgumentError, "no password specified" if password.nil?
+          require 'digest/md5'
+
+          m = Digest::MD5.hexdigest(password + user) 
+          m = Digest::MD5.hexdigest(m + msg.salt)
+          m = 'md5' + m
+          @conn << PasswordMessage.new(m).dump
+
+        when AuthentificationKerberosV4, AuthentificationKerberosV5, AuthentificationSCMCredential
+          raise "unsupported authentification"
+
         when AuthentificationOk
         when ErrorResponse
-          raise
+          raise "authentification failed"
         when NoticeResponse
           # TODO
         when ParameterStatus
@@ -62,6 +83,7 @@ class Connection
       @conn << Query.dump(sql)
 
       result = Result.new
+      errors = []
 
       loop do
         msg = Message.read(@conn)
@@ -78,13 +100,16 @@ class Connection
         when EmptyQueryResponse
         when ErrorResponse
           # TODO
-          raise msg.inspect
+          errors << msg
         when NoticeResponse
           p msg
         else
           # TODO
         end
       end
+
+      raise errors.map{|e| e.inspect}.join("   ") unless errors.empty?
+
       result
     }
   end
