@@ -79,7 +79,6 @@ class PGresult
   end
 
   def type(index)
-    raise
     # TODO: correct?
     @res.fields[index].type_oid
   end
