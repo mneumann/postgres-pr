@@ -452,6 +452,26 @@ class ParseComplete < Message
   register_message_type ?1
 end
 
+class Message
+  class << self
+    def fields(*attribs)
+      names = attribs.map {|name, type| name.to_s}
+      arg_list = names.join(", ")
+      var_list = names.join(", ") 
+      ivar_list = names.map {|name| "@" + name }.join(", ")
+      sym_list = names.map {|name| ":" + name }.join(", ")
+
+      class_eval %[
+        attr_accessor #{ sym_list } 
+
+        def initialize(#{ arg_list })
+          #{ ivar_list } = #{ arg_list }
+        end
+      ] 
+    end
+  end
+end
+
 class Query < Message
   register_message_type 'Q'
 
