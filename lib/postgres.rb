@@ -12,7 +12,9 @@ rescue LoadError
 
     def initialize(host, port, options, tty, database, user, auth)
       uri =
-      if host[0] != ?/
+      if host.nil?
+        nil
+      elsif host[0] != ?/
         "tcp://#{ host }:#{ port }"
       else
         "unix:#{ host }/.s.PGSQL.#{ port }"
@@ -32,22 +34,22 @@ rescue LoadError
   end
 
   class PGresult
+    attr_reader :fields, :result
+
     def initialize(res)
       @res = res
-    end
-
-    def fields
-      @res.fields.map {|f| f.name}
-    end
-
-    def result
-      @res.rows.map {|row| row.map {|c| c || ""} }
+      @fields = @res.fields.map {|f| f.name}
+      @result = @res.rows
     end
 
     include Enumerable
 
     def each(&block)
-      result.each(&block)
+      @result.each(&block)
+    end
+
+    def [](index)
+      @result[index]
     end
   end
 end

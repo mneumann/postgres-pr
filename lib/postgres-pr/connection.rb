@@ -14,7 +14,9 @@ class Connection
 
   # sync
 
-  def initialize(database, user, auth=nil, uri = "unix:/tmp/.s.PGSQL.5432")
+  def initialize(database, user, auth=nil, uri = nil)
+    uri ||= "unix:/tmp/.s.PGSQL.5432"
+
     raise unless @mutex.nil?
 
     @mutex = Mutex.new
@@ -74,15 +76,13 @@ class Connection
         when CopyInResponse
         when CopyOutResponse
         when EmptyQueryResponse
-          p "EMPTY!"
         when ErrorResponse
-          p msg
-          raise 
+          # TODO
+          raise msg.inspect
         when NoticeResponse
           p msg
-          # TODO
         else
-          raise
+          # TODO
         end
       end
       result
