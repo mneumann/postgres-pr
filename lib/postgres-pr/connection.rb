@@ -74,7 +74,7 @@ class Connection
   end
 
   class Result 
-    attr_accessor :rows, :fields
+    attr_accessor :rows, :fields, :cmd_tag
     def initialize(rows=[], fields=[])
       @rows, @fields = rows, fields
     end
@@ -93,6 +93,7 @@ class Connection
         when DataRow
           result.rows << msg.columns
         when CommandComplete
+          result.cmd_tag = msg.cmd_tag
         when ReadyForQuery
           break
         when RowDescription

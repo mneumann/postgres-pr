@@ -94,4 +94,17 @@ class PGresult
   def clear
     @res = @fields = @result = nil
   end
+
+  # Returns the number of rows affected by the SQL command
+  def cmdtuples
+    case @res.cmd_tag
+    when nil 
+      return nil
+    when /^INSERT\s+(\d+)\s+(\d+)$/, /^(DELETE|UPDATE|MOVE|FETCH)\s+(\d+)$/
+      $2.to_i
+    else
+      nil
+    end
+  end
+
 end
