@@ -3,90 +3,46 @@
 # Copyright:: (c) 2004 by Michael Neumann
 # 
 
+require 'buffer'
 require 'readbytes'
-require 'assert'
+
+class ParseError < RuntimeError; end
+class DumpError < RuntimeError; end
+
 
 # Base class representing a PostgreSQL protocol message
 class Message
-
   # One character message-typecode to class map
-  MsgTypeMap = Hash.new
-
-  # Postgres-specifiy datatypes (for pack/unpack)
-  # TODO: correct unpacking/packing (they are unsigned but should be signed!)
-  Int32 = 'N'
-  Int16 = 'n'
-
-  CString = 'Z*'
-  Char = 'C'
-  Rest = 'a*' 
-
-  def self.dump(*a)
-    new(*a).dump
-  end
-
-  attr_accessor :body
+  MsgTypeMap = Hash.new { UnknownMessageType }
 
   def self.register_message_type(type)
-    case type
-    when String
-      raise if type.size != 1
-      type = type[0]
-    end
-    case type
-    when Integer
-      raise if type < 0 or type > 255
-    else
-      raise
-    end
-
+    raise ArgumentError if type < 0 or type > 255
     raise "duplicate message type registration" if MsgTypeMap.has_key? type
+
     MsgTypeMap[type] = self
 
     self.const_set(:MsgType, type) 
-    class_eval %{
-      def message_type() MsgType end
-    }
-    instance_eval %{
-      def message_type() MsgType end
-    }
+    class_eval "def message_type; MsgType end"
   end
 
-  # TODO: mutex stream? or handle one layer above?
-  def self.read(stream, startup_message=false)
-    return read_startup(stream) if startup_message
+  def self.read(stream, startup=false)
+    type = stream.readbytes(1).unpack('C').first unless startup
+    length = stream.readbytes(4).unpack('N').first  # FIXME: length should be signed, not unsigned
 
-    type, length = stream.readbytes(5).unpack(Char + Int32)
-    klass = MsgTypeMap[type]
+    raise ParseError unless length >= 4
 
-    assert(length >= 4)
-
-    body = stream.readbytes(length-4)
-
-    obj = 
-    if klass.nil?
-      UnknownMessageType.create(body, type)
-    else
-      klass.create(body)
-    end
-
-    assert(obj.message_type, type)
-
-    obj
+    # initialize buffer
+    buffer = Buffer.new(startup ? length : 1+length)
+    buffer.write_byte(type) unless startup
+    buffer.write_int32_network(length)
+    buffer.copy_from_stream(stream, length-4)
+    
+    (startup ? StartupMessage : MsgTypeMap[type]).create(buffer)
   end
 
-  def self.read_startup(stream)
-    length = stream.readbytes(4).unpack(Int32).first
-    assert(length >= 4)
-    body = stream.readbytes(length-4)
-    StartupMessage.create(body)
-  end
-  
-
-  def self.create(body)
+  def self.create(buffer)
     obj = allocate
-    obj.body = body
-    obj.parse
+    obj.parse(buffer)
     obj
   end
 
@@ -94,73 +50,81 @@ class Message
     new(*args).dump
   end
 
-  def dump
-    [self.message_type, @body.size+4, @body].pack(Char + Int32 + Rest)
+  def dump(body_size=0)
+    buffer = Buffer.new(5 +  body_size)
+    buffer.write_byte(self.message_type)
+    buffer.write_int32_network(4 + body_size)
+    yield buffer if block_given?
+    raise DumpError  unless buffer.at_end?
+    return buffer.content
   end
 
-  def parse
+  def parse(buffer)
+    buffer.position = 5
+    yield buffer if block_given?
+    raise ParseError, buffer.inspect unless buffer.at_end?
+  end
+
+  def self.fields(*attribs)
+    names = attribs.map {|name, type| name.to_s}
+    arg_list = names.join(", ")
+    ivar_list = names.map {|name| "@" + name }.join(", ")
+    sym_list = names.map {|name| ":" + name }.join(", ")
+    class_eval %[
+      attr_accessor #{ sym_list } 
+      def initialize(#{ arg_list })
+        #{ ivar_list } = #{ arg_list }
+      end
+    ] 
   end
 end
 
 class UnknownMessageType < Message
-  def self.create(body, type)
-    new(body, type)
-  end
-
-  def initialize(body, type)
-    @body, @type = body, type
-  end
-
-  def message_type
-    @type
-  end
-
   def dump
     raise
   end
 end
 
 class Authentification < Message
-  register_message_type 'R'
+  register_message_type ?R
 
-  AuthTypeMap = Hash.new
+  AuthTypeMap = Hash.new { UnknownAuthType }
 
-  class << self
-    alias old_create create
-  end
-
-  # TODO
-  def self.create(body)
-    authtype = body.unpack(Int32).first
-    klass = AuthTypeMap[authtype] || (raise "Unknown authentification type")
-    klass.old_create(body)
+  def self.create(buffer)
+    buffer.position = 5
+    authtype = buffer.read_int32_network
+    klass = AuthTypeMap[authtype]
+    obj = klass.allocate
+    obj.parse(buffer)
+    obj
   end
 
   def self.register_auth_type(type)
-    raise "duplicate auth type registration" if AuthTypeMap.has_key? type
+    raise "duplicate auth type registration" if AuthTypeMap.has_key?(type)
     AuthTypeMap[type] = self
     self.const_set(:AuthType, type) 
-    class_eval %{
-      def auth_type() AuthType end
-    }
-  end
-
-  def parse
-    t = @body.unpack(Int32).first
-    assert(t == self.auth_type)
+    class_eval "def auth_type() AuthType end"
   end
 
   # the dump method of class Message
   alias message__dump dump
 
   def dump
-    @body = [self.auth_type].pack(Int32) 
-    super
+    super(4) do |buffer|
+      buffer.write_int32_network(self.auth_type)
+    end
   end
 
-  def initialize
-    raise "abstract class"
+  def parse(buffer)
+    super do
+      auth_t = buffer.read_int32_network 
+      raise ParseError unless auth_t == self.auth_type
+      yield if block_given?
+    end
   end
+end
+
+class UnknownAuthType < Authentification
 end
 
 class AuthentificationOk < Authentification 
@@ -187,264 +151,199 @@ module SaltedAuthentificationMixin
   end
 
   def dump
-    assert(@salt.size == self.class.salt_size)
-    @body = [self.auth_type, @salt].pack(Int32 + Rest) 
-    message__dump
+    raise DumpError unless @salt.size == self.salt_size
+
+    message__dump(4 + self.salt_size) do |buffer|
+      buffer.write_int32_network(self.auth_type)
+      buffer.write(@salt)
+    end
   end
 
-  def parse
-    t, @salt = @body.unpack(Int32 + Rest)
-    assert(@salt.size == self.class.salt_size)
-    assert(t == self.auth_type)
+  def parse(buffer)
+    super do
+      @salt = buffer.read(self.salt_size)
+    end
   end
 end
 
 class AuthentificationCryptPassword < Authentification 
   register_auth_type 4
-  def self.salt_size; 2 end
   include SaltedAuthentificationMixin
+  def salt_size; 2 end
 end
 
 
 class AuthentificationMD5Password < Authentification 
   register_auth_type 5
-  def self.salt_size; 4 end
   include SaltedAuthentificationMixin
+  def salt_size; 4 end
 end
 
 class AuthentificationSCMCredential < Authentification 
   register_auth_type 6
 end
 
-
-class ErrorResponse < Message
-  register_message_type 'E'
-
-  def dump
-    @body = ""
-    super
-  end
-end
-
 class ParameterStatus < Message
-  register_message_type 'S'
-
-  attr_accessor :key, :value
-
-  def initialize(key, value)
-    @key, @value = key, value
-  end
+  register_message_type ?S
+  fields :key, :value
 
   def dump
-    @body = [@key, @value].pack(CString * 2)
-    super
+    super(@key.size + 1 + @value.size + 1) do |buffer|
+      buffer.write_cstring(@key)
+      buffer.write_cstring(@value)
+    end
   end
 
-  def parse
-    @key, @value = @body.unpack(CString * 2)
+  def parse(buffer)
+    super do
+      @key = buffer.read_cstring
+      @value = buffer.read_cstring
+    end
   end
 end
 
 class BackendKeyData < Message
   register_message_type ?K
-
-  attr_accessor :process_id, :secret_key
-
-  def initialize(process_id, secret_key)
-    @process_id, @secret_key = process_id, secret_key
-  end
+  fields :process_id, :secret_key
 
   def dump
-    @body = [@process_id, @secret_key].pack(Int32 * 2)
-    super
+    super(4 + 4) do |buffer|
+      buffer.write_int32_network(@process_id)
+      buffer.write_int32_network(@secret_key)
+    end 
   end
 
-  def parse
-    @process_id, @secret_key = @body.unpack(Int32 * 2)
+  def parse(buffer)
+    super do
+      @process_id = buffer.read_int32_network
+      @secret_key = buffer.read_int32_network
+    end
   end
 end
-
 
 class ReadyForQuery < Message
-  register_message_type 'Z'
-
-  attr_accessor :backend_transaction_status_indicator
-
-  def initialize(backend_transaction_status_indicator)
-    @backend_transaction_status_indicator = backend_transaction_status_indicator
-  end
+  register_message_type ?Z
+  fields :backend_transaction_status_indicator
 
   def dump
-    @body = [@backend_transaction_status_indicator].pack(Char)
-    super
-  end
-
-  def parse
-    @backend_transaction_status_indicator = @body.unpack(Char).first
-    assert(@body.size == 1)
-  end
-end
-
-class RowDescription < Message
-  register_message_type 'T'
-
-  # TODO: dump
-
-  def parse
-    buf = @body
-
-    @fields = []
-    num_fields, buf = buf.unpack(Int16 + Rest)
-
-    num_fields.times do
-      h = {}
-      h[:name], h[:oid], h[:attr_nr], h[:type_oid], h[:typlen], h[:atttypmod], h[:formatcode], buf = 
-      buf.unpack(CString + Int32 + Int16 + Int32 + Int16 + Int32 + Int16 + Rest)
-
-      @fields << h
+    super(1) do |buffer|
+      buffer.write_byte(@backend_transaction_status_indicator)
     end
-    assert(buf.empty?)
+  end
+
+  def parse(buffer)
+    super do
+      @backend_transaction_status_indicator = buffer.read_byte
+    end
   end
 end
 
 class DataRow < Message
-  register_message_type 'D'
-
-  NULL = [-1].pack("N").unpack("N").first
-
-  attr_accessor :columns
-
-  def initialize(columns) 
-    @columns = columns
-  end
+  register_message_type ?D
+  fields :columns
 
   def dump
-    @body = [@columns.size].pack(Int16) 
-    @columns.each do |val|
-      @body <<
-      if val.nil?
-        [NULL].pack(Int32)
-      else
-        [val.size, val].pack(Int32 + Rest)
-      end
+    sz = @columns.inject(2) {|sum, col| sum + 4 + (col ? col.size : 0)}
+    super(sz) do |buffer|
+      buffer.write_int16_network(@columns.size)
+      @columns.each {|col|
+        buffer.write_int32_network(col ? col.size : -1)
+        buffer.write(col) if col
+      }
     end
-    super
   end
 
-  def parse
-    buf = @body
-
-    @columns = []
-    num_cols, buf = buf.unpack(Int16 + Rest)
-
-    num_cols.times do 
-      len, buf = buf.unpack(Int32 + Rest)
-      @columns << 
-      # TODO: -1
-      if len == NULL
-        # NULL value
-        nil
-      else
-        res = buf[0, len] 
-        assert(res.size == len)
-        buf = buf[len..-1]
-        res
-      end
+  def parse(buffer)
+    super do
+      n_cols = buffer.read_int16_network
+      @columns = (1..n_cols).collect {
+        len = buffer.read_int32_network 
+        if len == -1
+          nil
+        else
+          buffer.read(len)
+        end
+      }
     end
-    assert(buf.empty?)
   end
 end
 
 class CommandComplete < Message
-  register_message_type 'C'
-
-  attr_accessor :cmd_tag
-
-  def initialize(cmd_tag)
-    @cmd_tag = cmd_tag
-  end
+  register_message_type ?C
+  fields :cmd_tag
 
   def dump
-    @body = [@cmd_tag].pack(CString)
-    super
+    super(@cmd_tag.size + 1) do |buffer|
+      buffer.write_cstring(@cmd_tag)
+    end
   end
 
-  # TODO: parse @cmd_tag?
-  def parse
-    @cmd_tag, rest = @body.unpack(CString + Rest)
-    assert(rest.empty?)
+  def parse(buffer)
+    super do
+      @cmd_tag = buffer.read_cstring
+    end
   end
 end
-
-=begin
-class CopyInResponse < Message
-  register_message_type ?G
-end
-
-class CopyOutResponse < Message
-  register_message_type ?H
-end
-=end
 
 class EmptyQueryResponse < Message
   register_message_type ?I
 end
 
+# TODO
 class NoticeResponse < Message
   register_message_type ?N
-  # TODO
 end
 
+class ErrorResponse < Message
+  register_message_type ?E
 
-class StartupMessage < Message
-  attr_accessor :proto_version, :params
-
-  def initialize(proto_version, params)
-    @proto_version, @params = proto_version, params
-  end
-
-  def dump
-    @body = [@proto_version].pack(Int32) + @params.to_a.flatten.map {|e| e.to_s + "\000"}.join("") + "\000"
-    [@body.size + 4].pack(Int32) + @body
-  end
-
-  def parse
-    buf = @body
-
-    @proto_version, buf = buf.unpack(Int32 + Rest) # TODO: test proto_version?
-    @params = {}
-    while buf.length > 1
-      key, val, buf = buf.unpack(CString + CString + Rest)
-      @params[key] = val
+  def parse(buffer)
+    super do
+      @field_type = buffer.read_byte
+      break if @field_type == 0
+      @field_value = buffer.read_rest
     end
-    assert(buf.length == 1 && buf[0,1] == "\000")
   end
+end
+
+# TODO
+class CopyInResponse < Message
+  register_message_type ?G
+end
+
+# TODO
+class CopyOutResponse < Message
+  register_message_type ?H
 end
 
 class Parse < Message
-  register_message_type 'P'
- 
-  attr_accessor :query, :stmt_name, :parameter_oids
+  register_message_type ?P
+  fields :query, :stmt_name, :parameter_oids
+
   def initialize(query, stmt_name="", parameter_oids=[])
     @query, @stmt_name, @parameter_oids = query, stmt_name, parameter_oids
   end
 
-  def parse
-    buf = @body
-    @stmt_name, @query, num_param_types, buf = buf.unpack(CString + CString + Int16 + Rest) 
-    @parameter_oids = []
-    num_param_types.times do
-      # zero means unspecified. TODO: should map to nil?
-      param_oid, buf = buf.unpack(Int32 + Rest)
-      @paramter_oids << param_oid
+  def dump
+    sz = @stmt_name.size + 1 + @query.size + 1 + 2 + (4 * @parameter_oids.size)
+    super(sz) do |buffer| 
+      buffer.write_cstring(@stmt_name)
+      buffer.write_cstring(@query)
+      buffer.write_int16_network(@parameter_oids.size)
+      @parameter_oids.each {|oid| buffer.write_int32_network(oid) }
     end
-    assert(buf.empty?)
   end
 
-  def dump
-    @body = [@stmt_name, @query, @parameter_oids.size].pack(CString + CString + Int16) 
-    @body << @parameter_oids.pack(Int32 + "*")
-    super
+  def parse(buffer)
+    super do 
+      @stmt_name = buffer.read_cstring
+      @query = buffer.read_cstring
+      n_oids = buffer.read_int16_network
+      @parameter_oids = (1..n_oids).collect {
+        # TODO: zero means unspecified. map to nil?
+        buffer.read_int32_network
+      }
+    end
   end
 end
 
@@ -452,42 +351,94 @@ class ParseComplete < Message
   register_message_type ?1
 end
 
-class Message
-  class << self
-    def fields(*attribs)
-      names = attribs.map {|name, type| name.to_s}
-      arg_list = names.join(", ")
-      var_list = names.join(", ") 
-      ivar_list = names.map {|name| "@" + name }.join(", ")
-      sym_list = names.map {|name| ":" + name }.join(", ")
+class Query < Message
+  register_message_type ?Q
+  fields :query
 
-      class_eval %[
-        attr_accessor #{ sym_list } 
+  def dump
+    super(@query.size + 1) do |buffer|
+      buffer.write_cstring(@query)
+    end
+  end
 
-        def initialize(#{ arg_list })
-          #{ ivar_list } = #{ arg_list }
-        end
-      ] 
+  def parse(buffer)
+    super do
+      @query = buffer.read_cstring
     end
   end
 end
 
-class Query < Message
-  register_message_type 'Q'
+class RowDescription < Message
+  register_message_type ?T
 
-  attr_accessor :query
-
-  def initialize(query)
-    @query = query
-  end
+  class FieldInfo < Struct.new(:name, :oid, :attr_nr, :type_oid, :typlen, :atttypmod, :formatcode); end
 
   def dump
-    @body = @query + "\000"
-    super
+    sz = @fields.inject(2) {|sum, fld| sum + 18 + fld.name.size + 1 }
+    super(sz) do |buffer|
+      buffer.write_int16_network(@fields.size)
+      @fields.each { |f|
+        buffer.write_cstring(f.name)
+        buffer.write_int32_network(f.oid)
+        buffer.write_int16_network(f.attr_nr)
+        buffer.write_int32_network(f.type_oid)
+        buffer.write_int16_network(f.typlen)
+        buffer.write_int32_network(f.atttypmod)
+        buffer.write_int16_network(f.formatcode)
+      }
+    end
   end
 
-  def parse
-    @query, rest = @body.unpack(CString + Rest)
-    assert(rest.empty?)
+  def parse(buffer)
+    super do
+      n_fields = buffer.read_int16_network
+      @fields = (1..n_fields).collect {
+        f = FieldInfo.new
+        f.name       = buffer.read_cstring
+        f.oid        = buffer.read_int32_network
+        f.attr_nr    = buffer.read_int16_network
+        f.type_oid   = buffer.read_int32_network
+        f.typlen     = buffer.read_int16_network
+        f.atttypmod  = buffer.read_int32_network
+        f.formatcode = buffer.read_int16_network
+      }
+    end
+  end
+end
+
+class StartupMessage < Message
+  fields :proto_version, :params
+
+  def dump
+    sz = @params.inject(4 + 4) {|sum, kv| sum + kv[0].size + 1 + kv[1].size + 1} + 1
+
+    buffer = Buffer.new(sz)
+    buffer.write_int32_network(sz)
+    buffer.write_int32_network(@proto_version)
+    @params.each_pair {|key, value| 
+      buffer.write_cstring(key)
+      buffer.write_cstring(value)
+    }
+    buffer.write_byte(0)
+
+    raise DumpError unless buffer.at_end?
+    return buffer.content
+  end
+
+  def parse(buffer)
+    buffer.position = 4
+
+    @proto_version = buffer.read_int32_network
+    @params = {}
+
+    while buffer.position < buffer.size-1
+      key = buffer.read_cstring
+      val = buffer.read_cstring
+      @params[key] = val
+    end
+
+    nul = buffer.read_byte
+    raise ParseError unless nul == 0
+    raise ParseError unless buffer.at_end?
   end
 end
