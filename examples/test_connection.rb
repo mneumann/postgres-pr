@@ -1,4 +1,4 @@
-$LOAD_PATH.unshift '../src'
+$LOAD_PATH.unshift '../lib'
 require 'postgres-pr/connection'
 
 conn = Connection.new('mneumann', 'mneumann')

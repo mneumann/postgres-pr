@@ -5,11 +5,11 @@ spec = Gem::Specification.new do |s|
   s.version = '0.0.1'
   s.summary = 'A pure Ruby interface to the PostgreSQL database'
 
-  s.files = (Dir['src/**/*'] + Dir['test/**/*'] + 
+  s.files = (Dir['lib/**/*'] + Dir['test/**/*'] + 
              Dir['examples/**/*']).
              delete_if {|item| item.include?(".svn") }
 
-  s.require_path = 'src'
+  s.require_path = 'lib'
 
   s.author = "Michael Neumann"
   s.email = "mneumann@ntecs.de"

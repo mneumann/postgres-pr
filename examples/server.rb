@@ -1,8 +1,8 @@
-$LOAD_PATH.unshift "../src"
+$LOAD_PATH.unshift "../lib"
 require 'postgres-pr/message'
 require 'socket'
 
-s = UNIXServer.open(ARGV.shift).accept
+s = UNIXServer.open(ARGV.shift || raise).accept
 startup = true
 loop do
   msg = Message.read(s, startup)

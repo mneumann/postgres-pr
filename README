@@ -17,7 +17,7 @@ http://rubyforge.org/projects/wee
   > gem install postgres-pr
   > irb -r rubygems 
 
-Then in the interactive Ruby interpreter, type (replace DBNAME and DBUSER
+Then in the interactive Ruby interpreter type (replace DBNAME and DBUSER
 accordingly):
 
   require 'postgres-pr/connection'
