@@ -29,17 +29,15 @@ class PGconn
   end
 
   alias exec query
+
+  def self.escape(str)
+    # TODO: correct?
+    str.gsub(/\\/){ '\\\\' }.gsub(/'/){ '\\\'' }
+  end
+
 end
 
 class PGresult
-  attr_reader :fields, :result
-
-  def initialize(res)
-    @res = res
-    @fields = @res.fields.map {|f| f.name}
-    @result = @res.rows
-  end
-
   include Enumerable
 
   def each(&block)
@@ -48,5 +46,52 @@ class PGresult
 
   def [](index)
     @result[index]
+  end
+ 
+  def initialize(res)
+    @res = res
+    @fields = @res.fields.map {|f| f.name}
+    @result = @res.rows
+  end
+
+  # TODO: status, getlength, cmdstatus
+
+  attr_reader :result, :fields
+
+  def num_tuples
+    @result.size
+  end
+
+  def num_fields
+    @fields.size
+  end
+
+  def fieldname(index)
+    @fields[index]
+  end
+
+  def fieldnum(name)
+    @fields.index(name)
+  end
+
+  def type(index)
+    raise
+    # TODO: correct?
+    @res.fields[index].type_oid
+  end
+
+  def size(index)
+    raise
+    # TODO: correct?
+    @res.fields[index].typlen
+  end
+
+  def getvalue(tup_num, field_num)
+    @result[tup_num][field_num]
+  end
+
+  # free the result set
+  def clear
+    @res = @fields = @result = nil
   end
 end
