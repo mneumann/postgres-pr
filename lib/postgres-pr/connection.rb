@@ -5,10 +5,9 @@
 #
 
 require 'postgres-pr/message'
+require 'postgres-pr/version'
 require 'uri'
 require 'socket'
-require 'thread'
-require 'version'
 
 module PostgresPR
 
@@ -16,63 +15,61 @@ PROTO_VERSION = 3 << 16   #196608
 
 class Connection
 
-  # sync
-
   def initialize(database, user, password=nil, uri = nil)
     uri ||= DEFAULT_URI
 
-    raise unless @mutex.nil?
+    @params = {}
+    establish_connection(uri)
+  
+    @conn << StartupMessage.new(PROTO_VERSION, 'user' => user, 'database' => database).dump
 
-    @mutex = Mutex.new
+    loop do
+      msg = Message.read(@conn)
 
-    @mutex.synchronize {
-      @params = {}
-      establish_connection(uri)
-    
-      @conn << StartupMessage.new(PROTO_VERSION, 'user' => user, 'database' => database).dump
+      case msg
+      when AuthentificationClearTextPassword
+        raise ArgumentError, "no password specified" if password.nil?
+        @conn << PasswordMessage.new(password).dump
 
-      loop do
-        msg = Message.read(@conn)
+      when AuthentificationCryptPassword
+        raise ArgumentError, "no password specified" if password.nil?
+        @conn << PasswordMessage.new(password.crypt(msg.salt)).dump
 
-        case msg
-        when AuthentificationClearTextPassword
-          raise ArgumentError, "no password specified" if password.nil?
-          @conn << PasswordMessage.new(password).dump
+      when AuthentificationMD5Password
+        raise ArgumentError, "no password specified" if password.nil?
+        require 'digest/md5'
 
-        when AuthentificationCryptPassword
-          raise ArgumentError, "no password specified" if password.nil?
-          @conn << PasswordMessage.new(password.crypt(msg.salt)).dump
+        m = Digest::MD5.hexdigest(password + user) 
+        m = Digest::MD5.hexdigest(m + msg.salt)
+        m = 'md5' + m
+        @conn << PasswordMessage.new(m).dump
 
-        when AuthentificationMD5Password
-          raise ArgumentError, "no password specified" if password.nil?
-          require 'digest/md5'
+      when AuthentificationKerberosV4, AuthentificationKerberosV5, AuthentificationSCMCredential
+        raise "unsupported authentification"
 
-          m = Digest::MD5.hexdigest(password + user) 
-          m = Digest::MD5.hexdigest(m + msg.salt)
-          m = 'md5' + m
-          @conn << PasswordMessage.new(m).dump
-
-        when AuthentificationKerberosV4, AuthentificationKerberosV5, AuthentificationSCMCredential
-          raise "unsupported authentification"
-
-        when AuthentificationOk
-        when ErrorResponse
-          raise msg.field_values.join("\t")
-        when NoticeResponse
-          # TODO
-        when ParameterStatus
-          @params[msg.key] = msg.value
-        when BackendKeyData
-          # TODO
-          #p msg
-        when ReadyForQuery
-          # TODO: use transaction status
-          break
-        else
-          raise "unhandled message type"
-        end
+      when AuthentificationOk
+      when ErrorResponse
+        raise msg.field_values.join("\t")
+      when NoticeResponse
+        # TODO
+      when ParameterStatus
+        @params[msg.key] = msg.value
+      when BackendKeyData
+        # TODO
+        #p msg
+      when ReadyForQuery
+        # TODO: use transaction status
+        break
+      else
+        raise "unhandled message type"
       end
-    }
+    end
+  end
+
+  def close
+    raise "connection already closed" if @conn.nil?
+    @conn.shutdown
+    @conn = nil
   end
 
   class Result 
@@ -83,40 +80,38 @@ class Connection
   end
 
   def query(sql)
-    @mutex.synchronize {
-      @conn << Query.dump(sql)
+    @conn << Query.dump(sql)
 
-      result = Result.new
-      errors = []
+    result = Result.new
+    errors = []
 
-      loop do
-        msg = Message.read(@conn)
-        case msg
-        when DataRow
-          result.rows << msg.columns
-        when CommandComplete
-          result.cmd_tag = msg.cmd_tag
-        when ReadyForQuery
-          break
-        when RowDescription
-          result.fields = msg.fields
-        when CopyInResponse
-        when CopyOutResponse
-        when EmptyQueryResponse
-        when ErrorResponse
-          # TODO
-          errors << msg
-        when NoticeResponse
-          p msg
-        else
-          # TODO
-        end
+    loop do
+      msg = Message.read(@conn)
+      case msg
+      when DataRow
+        result.rows << msg.columns
+      when CommandComplete
+        result.cmd_tag = msg.cmd_tag
+      when ReadyForQuery
+        break
+      when RowDescription
+        result.fields = msg.fields
+      when CopyInResponse
+      when CopyOutResponse
+      when EmptyQueryResponse
+      when ErrorResponse
+        # TODO
+        errors << msg
+      when NoticeResponse
+        p msg
+      else
+        # TODO
       end
+    end
 
-      raise errors.map{|e| e.field_values.join("\t") }.join("\n") unless errors.empty?
+    raise errors.map{|e| e.field_values.join("\t") }.join("\n") unless errors.empty?
 
-      result
-    }
+    result
   end
 
   DEFAULT_PORT = 5432

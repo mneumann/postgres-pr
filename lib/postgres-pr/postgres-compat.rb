@@ -22,6 +22,10 @@ class PGconn
     @conn = PostgresPR::Connection.new(database, user, auth, uri)
   end
 
+  def close
+    @conn.close
+  end
+
   attr_reader :db
 
   def query(sql)
