@@ -399,6 +399,7 @@ end
 
 class RowDescription < Message
   register_message_type ?T
+  fields :fields
 
   class FieldInfo < Struct.new(:name, :oid, :attr_nr, :type_oid, :typlen, :atttypmod, :formatcode); end
 
@@ -430,6 +431,7 @@ class RowDescription < Message
         f.typlen     = buffer.read_int16_network
         f.atttypmod  = buffer.read_int32_network
         f.formatcode = buffer.read_int16_network
+        f
       }
     end
   end
