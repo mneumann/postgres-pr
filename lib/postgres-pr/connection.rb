@@ -48,35 +48,44 @@ class Connection
     }
   end
 
+  class Result 
+    attr_accessor :rows, :fields
+    def initialize(rows=[], fields=[])
+      @rows, @fields = rows, fields
+    end
+  end
+
   def query(sql)
     @mutex.synchronize {
       @conn << Query.dump(sql)
 
-      rows = []
+      result = Result.new
 
       loop do
         msg = Message.read(@conn)
         case msg
         when DataRow
-          rows << msg.columns 
+          result.rows << msg.columns
         when CommandComplete
         when ReadyForQuery
           break
         when RowDescription
-          # TODO
+          result.fields = msg.fields
         when CopyInResponse
         when CopyOutResponse
         when EmptyQueryResponse
+          p "EMPTY!"
         when ErrorResponse
           p msg
           raise 
         when NoticeResponse
+          p msg
           # TODO
         else
           raise
         end
       end
-      rows
+      result
     }
   end
 
