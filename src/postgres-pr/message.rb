@@ -289,21 +289,50 @@ class EmptyQueryResponse < Message
   register_message_type ?I
 end
 
-# TODO
-class NoticeResponse < Message
-  register_message_type ?N
-end
+module NoticeErrorMixin
+  attr_accessor :field_type, :field_values
 
-class ErrorResponse < Message
-  register_message_type ?E
+  def initialize(field_type=0, field_values=[])
+    raise ArgumentError if field_type == 0 and not field_values.empty?
+    @field_type, @field_values = field_type, field_values
+  end
+
+  def dump
+    raise ArgumentError if @field_type == 0 and not @field_values.empty?
+
+    sz = 1 
+    sz += @field_values.inject(1) {|sum, fld| sum + fld.size + 1} unless @field_type == 0 
+
+    super(sz) do |buffer|
+      buffer.write_byte(@field_type)
+      break if @field_type == 0 
+      @field_values.each {|fld| buffer.write_cstring(fld) }
+      buffer.write_byte(0)
+    end
+  end
 
   def parse(buffer)
     super do
       @field_type = buffer.read_byte
       break if @field_type == 0
-      @field_value = buffer.read_rest
+      @field_values = []
+      while buffer.position < buffer.size-1
+        @field_values << buffer.read_cstring
+      end
+      terminator = buffer.read_byte
+      raise ParseError unless terminator == 0
     end
   end
+end
+
+class NoticeResponse < Message
+  register_message_type ?N
+  include NoticeErrorMixin
+end
+
+class ErrorResponse < Message
+  register_message_type ?E
+  include NoticeErrorMixin
 end
 
 # TODO
