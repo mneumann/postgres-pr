@@ -22,4 +22,4 @@ accordingly):
 
   require 'postgres-pr/connection'
   c = Connection.new('DBNAME', 'DBUSER')
-  c.query('SELECT 1+2')                  # => [["3"]]
+  c.query('SELECT 1+2').rows              # => [["3"]]
