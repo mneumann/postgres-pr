@@ -34,7 +34,7 @@ class Message
     raise ParseError unless length >= 4
 
     # initialize buffer
-    buffer = Buffer.new(startup ? length : 1+length)
+    buffer = Buffer.of_size(startup ? length : 1+length)
     buffer.write_byte(type) unless startup
     buffer.write_int32_network(length)
     buffer.copy_from_stream(stream, length-4)
@@ -53,7 +53,7 @@ class Message
   end
 
   def dump(body_size=0)
-    buffer = Buffer.new(5 +  body_size)
+    buffer = Buffer.of_size(5 +  body_size)
     buffer.write_byte(self.message_type)
     buffer.write_int32_network(4 + body_size)
     yield buffer if block_given?
@@ -462,7 +462,7 @@ class StartupMessage < Message
   def dump
     sz = @params.inject(4 + 4) {|sum, kv| sum + kv[0].size + 1 + kv[1].size + 1} + 1
 
-    buffer = Buffer.new(sz)
+    buffer = Buffer.of_size(sz)
     buffer.write_int32_network(sz)
     buffer.write_int32_network(@proto_version)
     @params.each_pair {|key, value| 
@@ -498,7 +498,7 @@ class SSLRequest < Message
 
   def dump
     sz = 4 + 4
-    buffer = Buffer.new(sz)
+    buffer = Buffer.of_size(sz)
     buffer.write_int32_network(sz)
     buffer.write_int32_network(@ssl_request_code)
     raise DumpError unless buffer.at_end?

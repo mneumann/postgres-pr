@@ -7,12 +7,19 @@ class Buffer
   class Error < RuntimeError; end
   class EOF < Error; end 
 
-  def initialize(size)
-    raise ArgumentError if size < 0
+  def self.from_string(str)
+    new(str)
+  end
 
-    @size = size
+  def self.of_size(size)
+    raise ArgumentError if size < 0
+    new('#' * size)
+  end 
+
+  def initialize(content)
+    @size = content.size
+    @content = content
     @position = 0
-    @content = "#" * @size
   end
 
   def size
@@ -58,10 +65,11 @@ class Buffer
       write(str)
       n -= str.size
     end
+    raise if n < 0 
   end
 
   def write_cstring(cstr)
-    raise ArgumentError, "Invalid Ruby/cstring" if cstr.include?("\000")
+    raise ArgumentError, "Invalid Ruby/cstring" if cstr.include?(0)
     write(cstr)
     write("\000")
   end
