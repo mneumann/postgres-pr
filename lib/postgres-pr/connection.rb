@@ -1,12 +1,14 @@
 #
 # Author:: Michael Neumann
-# Copyright:: (c) 2004 by Michael Neumann
+# Copyright:: (c) 2005 by Michael Neumann
+# License:: Same as Ruby's or BSD
 #
 
 require 'postgres-pr/message'
 require 'uri'
 require 'socket'
 require 'thread'
+require 'version'
 
 module PostgresPR
 

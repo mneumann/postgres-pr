@@ -1,8 +1,14 @@
 require 'rubygems'
 
+if File.read('lib/postgres-pr/version.rb') =~ /Version\s+=\s+"(\d+\.\d+\.\d+)"/
+  version = $1
+else
+  raise "no version"
+end
+
 spec = Gem::Specification.new do |s|
   s.name = 'postgres-pr'
-  s.version = '0.3.2'
+  s.version = version
   s.summary = 'A pure Ruby interface to the PostgreSQL database'
 
   s.files = (Dir['lib/**/*'] + Dir['test/**/*'] + 

@@ -1,6 +1,7 @@
 $LOAD_PATH.unshift "../lib"
 require 'postgres-pr/message'
 require 'socket'
+include PostgresPR
 
 s = UNIXSocket.new(ARGV.shift || "/tmp/.s.PGSQL.5432")
 
