@@ -15,6 +15,9 @@ PROTO_VERSION = 3 << 16   #196608
 
 class Connection
 
+  # A block which is called with the NoticeResponse object as parameter.
+  attr_accessor :notice_processor
+
   def initialize(database, user, password=nil, uri = nil)
     uri ||= DEFAULT_URI
 
@@ -51,7 +54,7 @@ class Connection
       when ErrorResponse
         raise msg.field_values.join("\t")
       when NoticeResponse
-        # TODO
+        @notice_processor.call(msg) if @notice_processor
       when ParameterStatus
         @params[msg.key] = msg.value
       when BackendKeyData
@@ -103,7 +106,7 @@ class Connection
         # TODO
         errors << msg
       when NoticeResponse
-        p msg
+        @notice_processor.call(msg) if @notice_processor
       else
         # TODO
       end

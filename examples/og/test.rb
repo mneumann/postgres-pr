@@ -1,5 +1,5 @@
 $LOAD_PATH.unshift '../../lib'
-$LOAD_PATH.unshift '/tmp/og-0.5.0/lib'
+require 'rubygems'
 require 'og'
 require 'glue/logger'
 
