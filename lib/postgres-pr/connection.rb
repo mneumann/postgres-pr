@@ -8,14 +8,14 @@ require 'uri'
 require 'socket'
 require 'thread'
 
-PROTO_VERSION = 196608
+PROTO_VERSION = 3 << 16   #196608
 
 class Connection
 
   # sync
 
   def initialize(database, user, password=nil, uri = nil)
-    uri ||= "unix:/tmp/.s.PGSQL.5432"
+    uri ||= DEFAULT_URI
 
     raise unless @mutex.nil?
 
@@ -116,6 +116,13 @@ class Connection
 
   DEFAULT_PORT = 5432
   DEFAULT_HOST = 'localhost'
+  DEFAULT_PATH = '/tmp' 
+  DEFAULT_URI = 
+    if RUBY_PLATFORM.include?('win')
+      'tcp://' + DEFAULT_HOST + ':' + DEFAULT_PORT.to_s 
+    else
+      'unix:' + File.join(DEFAULT_PATH, '.s.PGSQL.' + DEFAULT_PORT.to_s)  
+    end
 
   private
 
