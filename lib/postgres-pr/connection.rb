@@ -8,6 +8,8 @@ require 'uri'
 require 'socket'
 require 'thread'
 
+module PostgresPR
+
 PROTO_VERSION = 3 << 16   #196608
 
 class Connection
@@ -140,3 +142,5 @@ class Connection
     end
   end
 end
+
+end # module PostgresPR

@@ -24,6 +24,8 @@ end
 
 $LOAD_PATH.unshift '../lib'
 require 'postgres-pr/message'
+include PostgresPR
+
 class Buffer
   alias old_content content
   def content

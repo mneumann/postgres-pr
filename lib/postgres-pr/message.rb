@@ -6,6 +6,8 @@
 require 'buffer'
 require 'readbytes'
 
+module PostgresPR
+
 class ParseError < RuntimeError; end
 class DumpError < RuntimeError; end
 
@@ -520,3 +522,5 @@ end
 class Terminate < Message
   register_message_type ?X
 end
+
+end # module PostgresPR
