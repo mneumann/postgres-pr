@@ -1,4 +1,5 @@
-require 'message'
+$LOAD_PATH.unshift "../src"
+require 'postgres-pr/message'
 require 'socket'
 
 s = UNIXSocket.new(ARGV.shift || "/tmp/.s.PGSQL.5432")
@@ -8,6 +9,7 @@ s << msg.dump
 
 Thread.start(s) { |s|
   sleep 2
+  s << Query.new("drop table test").dump
   s << Query.new("create table test (i int, v varchar(100))").dump
   s << Parse.new("insert into test (i, v) values ($1, $2)", "blah").dump 
   s << Query.new("EXECUTE blah(1, 'hallo')").dump

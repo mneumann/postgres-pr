@@ -1,4 +1,5 @@
-require 'message'
+$LOAD_PATH.unshift "../src"
+require 'postgres-pr/message'
 require 'socket'
 
 s = UNIXServer.open(ARGV.shift).accept

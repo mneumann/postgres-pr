@@ -3,7 +3,7 @@
 # Copyright:: (c) 2004 by Michael Neumann
 #
 
-require 'message'
+require 'postgres-pr/message'
 require 'uri'
 require 'socket'
 require 'thread'
@@ -98,23 +98,4 @@ class Connection
       raise 'unrecognized uri scheme format (must be tcp or unix)'
     end
   end
-end
-
-if __FILE__ == $0
-  conn = Connection.new('mneumann', 'mneumann')
-  #p conn.query("DROP TABLE test; CREATE TABLE test (a VARCHAR(100))")
-  #p conn.query("INSERT INTO test VALUES ('hallo')") 
-  #p conn.query("INSERT INTO test VALUES ('leute')") 
-  #conn.query("COMMIT")
-
-=begin
-  conn.query("BEGIN")
-  10000.times do |i|
-    p i
-    conn.query("INSERT INTO test VALUES ('#{i}')") 
-  end
-  conn.query("COMMIT")
-=end
-
-  p conn.query("SELECT * FROM test")
 end

@@ -22,7 +22,8 @@ class Module
   end
 end
 
-require 'message'
+$LOAD_PATH.unshift '../src'
+require 'postgres-pr/message'
 class Buffer
   alias old_content content
   def content

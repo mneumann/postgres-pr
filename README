@@ -1,2 +1,25 @@
+= Pure Ruby PostgreSQL interface
+
 This is a library to access PostgreSQL from Ruby without the need of any C
 library.
+
+== Author and Copyright
+
+Copyright (c) 2004 by Michael Neumann (mneumann@ntecs.de). 
+Released under the same terms of license as Ruby.
+
+== Homepage
+
+http://rubyforge.org/projects/wee
+
+== Quick Example
+
+  > gem install postgres-pr
+  > irb -r rubygems 
+
+Then in the interactive Ruby interpreter, type (replace DBNAME and DBUSER
+accordingly):
+
+  require 'postgres-pr/connection'
+  c = Connection.new('DBNAME', 'DBUSER')
+  c.query('SELECT 1+2')                  # => [["3"]]
