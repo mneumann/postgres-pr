@@ -55,7 +55,7 @@ class Connection
 
         when AuthentificationOk
         when ErrorResponse
-          raise "authentification failed"
+          raise msg.field_values.join("\t")
         when NoticeResponse
           # TODO
         when ParameterStatus
@@ -110,7 +110,7 @@ class Connection
         end
       end
 
-      raise errors.map{|e| e.inspect}.join("   ") unless errors.empty?
+      raise errors.map{|e| e.field_values.join("\t") }.join("\n") unless errors.empty?
 
       result
     }

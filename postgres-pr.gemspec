@@ -2,7 +2,7 @@ require 'rubygems'
 
 spec = Gem::Specification.new do |s|
   s.name = 'postgres-pr'
-  s.version = '0.3.0'
+  s.version = '0.3.1'
   s.summary = 'A pure Ruby interface to the PostgreSQL database'
 
   s.files = (Dir['lib/**/*'] + Dir['test/**/*'] + 
