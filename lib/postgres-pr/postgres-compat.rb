@@ -35,6 +35,10 @@ class PGconn
 
   alias exec query
 
+  def transaction_status
+    @conn.transaction_status
+  end
+
   def self.escape(str)
     # TODO: correct?
     str.gsub(/\\/){ '\\\\' }.gsub(/'/){ '\\\'' }

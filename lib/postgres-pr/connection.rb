@@ -18,9 +18,35 @@ class Connection
   # A block which is called with the NoticeResponse object as parameter.
   attr_accessor :notice_processor
 
+  #
+  # Returns one of the following statuses:
+  #
+  #   PQTRANS_IDLE    = 0 (connection idle)
+  #   PQTRANS_INTRANS = 2 (idle, within transaction block)
+  #   PQTRANS_INERROR = 3 (idle, within failed transaction)
+  #   PQTRANS_UNKNOWN = 4 (cannot determine status)
+  #
+  # Not yet implemented is:
+  #
+  #   PQTRANS_ACTIVE  = 1 (command in progress)
+  #
+  def transaction_status
+    case @transaction_status
+    when ?I
+      0
+    when ?T
+      2
+    when ?E
+      3
+    else
+      4
+    end
+  end
+
   def initialize(database, user, password=nil, uri = nil)
     uri ||= DEFAULT_URI
 
+    @transaction_status = nil
     @params = {}
     establish_connection(uri)
   
@@ -61,7 +87,7 @@ class Connection
         # TODO
         #p msg
       when ReadyForQuery
-        # TODO: use transaction status
+        @transaction_status = msg.backend_transaction_status_indicator
         break
       else
         raise "unhandled message type"
@@ -96,6 +122,7 @@ class Connection
       when CommandComplete
         result.cmd_tag = msg.cmd_tag
       when ReadyForQuery
+        @transaction_status = msg.backend_transaction_status_indicator
         break
       when RowDescription
         result.fields = msg.fields
