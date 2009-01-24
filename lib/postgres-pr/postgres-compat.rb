@@ -40,8 +40,7 @@ class PGconn
   end
 
   def self.escape(str)
-    # TODO: correct?
-    str.gsub(/\\/){ '\\\\' }.gsub(/'/){ '\\\'' }
+    str.gsub("'","''")
   end
 
 end
