@@ -68,15 +68,17 @@ class Buffer
     raise if n < 0 
   end
 
+  NUL = "\000"
+
   def write_cstring(cstr)
-    raise ArgumentError, "Invalid Ruby/cstring" if cstr.include?(0)
+    raise ArgumentError, "Invalid Ruby/cstring" if cstr.include?(NUL)
     write(cstr)
-    write("\000")
+    write(NUL)
   end
 
   # returns a Ruby string without the trailing NUL character
   def read_cstring
-    nul_pos = @content.index(0, @position)
+    nul_pos = @content.index(NUL, @position)
     raise Error, "no cstring found!" unless nul_pos
 
     sz = nul_pos - @position

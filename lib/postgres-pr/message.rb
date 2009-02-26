@@ -5,7 +5,23 @@
 # 
 
 require 'buffer'
-require 'readbytes'
+class IO
+  def read_exactly_n_bytes(n)
+    buf = read(n)
+    raise EOFError if buf == nil
+    return buf if buf.size == n
+
+    n -= buf.size
+
+    while n > 0
+      str = read(n)
+      raise EOFError if str == nil
+      buf << str
+      n -= str.size 
+    end
+    return buf
+  end
+end
 
 module PostgresPR
 
@@ -19,8 +35,7 @@ class Message
   MsgTypeMap = Hash.new { UnknownMessageType }
 
   def self.register_message_type(type)
-    raise ArgumentError if type < 0 or type > 255
-    raise "duplicate message type registration" if MsgTypeMap.has_key? type
+    raise "duplicate message type registration" if MsgTypeMap.has_key?(type)
 
     MsgTypeMap[type] = self
 
@@ -29,14 +44,14 @@ class Message
   end
 
   def self.read(stream, startup=false)
-    type = stream.readbytes(1).unpack('C').first unless startup
-    length = stream.readbytes(4).unpack('N').first  # FIXME: length should be signed, not unsigned
+    type = stream.read_exactly_n_bytes(1) unless startup
+    length = stream.read_exactly_n_bytes(4).unpack('N').first  # FIXME: length should be signed, not unsigned
 
     raise ParseError unless length >= 4
 
     # initialize buffer
     buffer = Buffer.of_size(startup ? length : 1+length)
-    buffer.write_byte(type) unless startup
+    buffer.write(type) unless startup
     buffer.write_int32_network(length)
     buffer.copy_from_stream(stream, length-4)
     
@@ -55,7 +70,7 @@ class Message
 
   def dump(body_size=0)
     buffer = Buffer.of_size(5 +  body_size)
-    buffer.write_byte(self.message_type)
+    buffer.write(self.message_type)
     buffer.write_int32_network(4 + body_size)
     yield buffer if block_given?
     raise DumpError  unless buffer.at_end?
@@ -89,7 +104,7 @@ class UnknownMessageType < Message
 end
 
 class Authentification < Message
-  register_message_type ?R
+  register_message_type 'R'
 
   AuthTypeMap = Hash.new { UnknownAuthType }
 
@@ -187,7 +202,7 @@ class AuthentificationSCMCredential < Authentification
 end
 
 class PasswordMessage < Message
-  register_message_type ?p
+  register_message_type 'p'
   fields :password
 
   def dump
@@ -204,7 +219,7 @@ class PasswordMessage < Message
 end
 
 class ParameterStatus < Message
-  register_message_type ?S
+  register_message_type 'S'
   fields :key, :value
 
   def dump
@@ -223,7 +238,7 @@ class ParameterStatus < Message
 end
 
 class BackendKeyData < Message
-  register_message_type ?K
+  register_message_type 'K'
   fields :process_id, :secret_key
 
   def dump
@@ -242,7 +257,7 @@ class BackendKeyData < Message
 end
 
 class ReadyForQuery < Message
-  register_message_type ?Z
+  register_message_type 'Z'
   fields :backend_transaction_status_indicator
 
   def dump
@@ -259,7 +274,7 @@ class ReadyForQuery < Message
 end
 
 class DataRow < Message
-  register_message_type ?D
+  register_message_type 'D'
   fields :columns
 
   def dump
@@ -289,7 +304,7 @@ class DataRow < Message
 end
 
 class CommandComplete < Message
-  register_message_type ?C
+  register_message_type 'C'
   fields :cmd_tag
 
   def dump
@@ -306,7 +321,7 @@ class CommandComplete < Message
 end
 
 class EmptyQueryResponse < Message
-  register_message_type ?I
+  register_message_type 'I'
 end
 
 module NoticeErrorMixin
@@ -346,27 +361,27 @@ module NoticeErrorMixin
 end
 
 class NoticeResponse < Message
-  register_message_type ?N
+  register_message_type 'N'
   include NoticeErrorMixin
 end
 
 class ErrorResponse < Message
-  register_message_type ?E
+  register_message_type 'E'
   include NoticeErrorMixin
 end
 
 # TODO
 class CopyInResponse < Message
-  register_message_type ?G
+  register_message_type 'G'
 end
 
 # TODO
 class CopyOutResponse < Message
-  register_message_type ?H
+  register_message_type 'H'
 end
 
 class Parse < Message
-  register_message_type ?P
+  register_message_type 'P'
   fields :query, :stmt_name, :parameter_oids
 
   def initialize(query, stmt_name="", parameter_oids=[])
@@ -397,11 +412,11 @@ class Parse < Message
 end
 
 class ParseComplete < Message
-  register_message_type ?1
+  register_message_type '1'
 end
 
 class Query < Message
-  register_message_type ?Q
+  register_message_type 'Q'
   fields :query
 
   def dump
@@ -418,7 +433,7 @@ class Query < Message
 end
 
 class RowDescription < Message
-  register_message_type ?T
+  register_message_type 'T'
   fields :fields
 
   class FieldInfo < Struct.new(:name, :oid, :attr_nr, :type_oid, :typlen, :atttypmod, :formatcode); end
@@ -516,12 +531,12 @@ end
 =begin
 # TODO: duplicate message-type, split into client/server messages
 class Sync < Message
-  register_message_type ?S
+  register_message_type 'S'
 end
 =end
 
 class Terminate < Message
-  register_message_type ?X
+  register_message_type 'X'
 end
 
 end # module PostgresPR
