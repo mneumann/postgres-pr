@@ -43,6 +43,14 @@ class PGconn
     str.gsub("'","''").gsub("\\", "\\\\\\\\")
   end
 
+  def notice_processor
+    @conn.notice_processor
+  end
+
+  def notice_processor=(np)
+    @conn.notice_processor = np
+  end
+
 end
 
 class PGresult
