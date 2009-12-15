@@ -19,6 +19,6 @@ spec = Gem::Specification.new do |s|
 
   s.author = "Michael Neumann"
   s.email = "mneumann@ntecs.de"
-  s.homepage = "postgres-pr.rubyforge.org"
+  s.homepage = "http://postgres-pr.rubyforge.org"
   s.rubyforge_project = "postgres-pr"
 end
