@@ -4,6 +4,11 @@
 require 'postgres-pr/connection'
 
 class PGconn
+  PQTRANS_IDLE    = 0 #(connection idle)
+  PQTRANS_INTRANS = 2 #(idle, within transaction block)
+  PQTRANS_INERROR = 3 #(idle, within failed transaction)
+  PQTRANS_UNKNOWN = 4 #(cannot determine status)
+
   class << self
     alias connect new
   end
@@ -41,6 +46,10 @@ class PGconn
 
   def self.escape(str)
     str.gsub("'","''").gsub("\\", "\\\\\\\\")
+  end
+
+  def escape(str)
+    self.class.escape(str)
   end
 
   def notice_processor
@@ -91,9 +100,13 @@ class PGresult
     @result.size
   end
 
+  alias :ntuples :num_tuples
+
   def num_fields
     @fields.size
   end
+
+  alias :nfields :num_fields
 
   def fieldname(index)
     @fields[index]
@@ -107,6 +120,8 @@ class PGresult
     # TODO: correct?
     @res.fields[index].type_oid
   end
+  
+  alias :ftype :type
 
   def size(index)
     raise
@@ -146,6 +161,8 @@ class PGresult
       nil
     end
   end
+  
+  alias :cmd_tuples :cmdtuples
 
 end
 
