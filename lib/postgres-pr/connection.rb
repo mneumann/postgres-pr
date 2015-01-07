@@ -9,6 +9,9 @@ require 'postgres-pr/version'
 require 'uri'
 require 'socket'
 
+class Error < ::StandardError; end
+class DatabaseError < Error; end
+
 module PostgresPR
 
 PROTO_VERSION = 3 << 16   #196608
@@ -139,7 +142,7 @@ class Connection
       end
     end
 
-    raise errors.map{|e| e.field_values.join("\t") }.join("\n") unless errors.empty?
+    raise DatabaseError.new(errors.map{|e| e.field_values.join("\t") }.join("\n")) unless errors.empty?
 
     result
   end
